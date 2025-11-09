@@ -1,0 +1,5 @@
+.venv/
+__pycache__/
+.env
+PyWhatKit_DB.txt
+user_config.py
