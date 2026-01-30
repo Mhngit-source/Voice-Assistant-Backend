@@ -213,8 +213,6 @@ def main_process():
             request = request.replace("search google", "")
             webbrowser.open("https://www.google.com/search?q=" + request)
             
-        elif "who is mini" in request:
-            speak("Mini is a lovely girl , and mohan likes him very much")
             
         elif "send whatsapp" in request:
             try:
