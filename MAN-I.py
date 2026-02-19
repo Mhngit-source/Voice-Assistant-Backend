@@ -9,7 +9,7 @@ import wikipedia
 import pywhatkit as pwk
 import user_config
 import smtplib, ssl
-import open_ai as ai
+import gemini_ai as ai
 import img_gen
 import mtranslate
 import sys
@@ -173,22 +173,22 @@ def main_process():
                 with open("todo.txt", "a") as file:
                     file.write(task + "\n")
         
-        elif "my task" in request:
+        elif "what is my task today" in request:
             with open("todo.txt", "r") as file:
                 speak("work we have to do today is :" + file.read())
         
-        elif "today job" in request:
-            with open("todo.txt", "r") as file:
-                tasks = file.read()
-            try:
-                notification.notify(
-                    title="Today's Work",
-                    message=tasks,
-                    timeout=10
-                )
-            except Exception as e:
-                print(f"Notification error: {e}", flush=True)
-                speak("Your tasks are: " + tasks)
+        # elif "what is my task today" in request:
+        #     with open("todo.txt", "r") as file:
+        #         tasks = file.read()
+        #     try:
+        #         notification.notify(
+        #             title="Today's Work",
+        #             message=tasks,
+        #             timeout=10
+        #         )
+        #     except Exception as e:
+        #         print(f"Notification error: {e}", flush=True)
+        #         speak("Your tasks are: " + tasks)
             
         elif "open" in request:
             query = request.replace("open", "")
@@ -240,7 +240,7 @@ def main_process():
             request = request.replace("ask ai", "")
             jarvis_chat.append({"role": "user", "content": request})
             try:
-                response = ai.send_request(jarvis_chat)
+                response = ai.simple_send_request(jarvis_chat)
                 if response:
                     speak(response)
                 else:

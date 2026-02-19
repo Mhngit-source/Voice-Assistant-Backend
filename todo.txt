@@ -8,3 +8,6 @@ play basketball
 go to gym
 play cricket
 python programming
+gemini api
+google
+virat
