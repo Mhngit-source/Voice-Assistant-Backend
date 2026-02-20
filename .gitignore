@@ -4,3 +4,4 @@ __pycache__/
 PyWhatKit_DB.txt
 user_config.py
 .env
+generated_images/
