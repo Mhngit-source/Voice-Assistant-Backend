@@ -14,7 +14,6 @@ import traceback
 if 'gemini_ai' in sys.modules:
     del sys.modules['gemini_ai']
 
-# Now import fresh
 import gemini_ai
 import img_gen
 
@@ -42,10 +41,8 @@ if not os.path.exists(GENERATED_IMAGES_DIR):
 @app.route('/start', methods=['POST'])
 def start_assistant():
     global assistant_process
-    
     if assistant_process and assistant_process.poll() is None:
         return jsonify({"status": "already_running", "message": "MAN-I is already running"})
-    
     try:
         python_executable = sys.executable
         assistant_process = subprocess.Popen(
@@ -56,22 +53,17 @@ def start_assistant():
             bufsize=1,
             cwd=os.getcwd()
         )
-        
         time.sleep(2)
-        
         if assistant_process.poll() is not None:
             stdout, stderr = assistant_process.communicate()
             return jsonify({"status": "error", "message": f"MAN-I failed to start: {stderr}"})
-        
         return jsonify({"status": "success", "message": "MAN-I started"})
-        
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
 
 @app.route('/stop', methods=['POST'])
 def stop_assistant():
     global assistant_process
-    
     if assistant_process and assistant_process.poll() is None:
         assistant_process.terminate()
         try:
@@ -86,7 +78,6 @@ def stop_assistant():
 
 @app.route('/status', methods=['GET'])
 def get_status():
-    """Get MAN-I status"""
     global assistant_process
     if assistant_process and assistant_process.poll() is None:
         return jsonify({"status": "active"})
@@ -96,35 +87,25 @@ def get_status():
 # ============ CHAT ENDPOINT ============
 @app.route('/api/chat/text', methods=['POST'])
 def chat_text():
-    """Handle text chat requests with Gemini only"""
     try:
         data = request.json
         user_id = data.get('userId', 'anonymous')
         message = data.get('message', '')
         session_id = data.get('sessionId', user_id)
-        
         if not message:
             return jsonify({"success": False, "error": "No message provided"})
-        
         print(f"\n📝 Chat request: '{message[:50]}...'", flush=True)
         print(f"   Session: {session_id}", flush=True)
-        
-        # Prepare chat history
         with session_lock:
             if session_id not in active_sessions:
                 active_sessions[session_id] = []
             chat_history = active_sessions[session_id]
             chat_history.append({"role": "user", "content": message})
-        
-        # Call Gemini
         try:
             response_text = gemini_ai.send_request(chat_history)
-            
-            # Save to history
             with session_lock:
                 if session_id in active_sessions:
                     active_sessions[session_id].append({"role": "assistant", "content": response_text})
-            
             return jsonify({
                 "success": True,
                 "response": response_text,
@@ -133,11 +114,9 @@ def chat_text():
                 "sessionId": session_id,
                 "timestamp": datetime.now().isoformat()
             })
-            
         except Exception as e:
             error_str = str(e)
             print(f"⚠️ Gemini failed: {error_str[:100]}", flush=True)
-            
             return jsonify({
                 "success": True,
                 "response": "I'm having trouble processing your request. Please try again.",
@@ -146,60 +125,39 @@ def chat_text():
                 "sessionId": session_id,
                 "timestamp": datetime.now().isoformat()
             })
-        
     except Exception as e:
         print(f"❌ Chat error: {e}", flush=True)
         traceback.print_exc()
-        return jsonify({
-            "success": False, 
-            "response": "An error occurred. Please try again.",
-            "citations": [],
-            "source": "error"
-        })
+        return jsonify({"success": False, "response": "An error occurred.", "source": "error"})
 
 # ============ IMAGE GENERATION ENDPOINT ============
 @app.route('/api/generate-image', methods=['POST'])
 def generate_image_api():
-    """Generate image using img_gen.py"""
     try:
         data = request.json
         user_id = data.get('userId', 'anonymous')
         prompt = data.get('prompt', '')
-        
         if not prompt:
             return jsonify({"success": False, "error": "No prompt provided"})
-        
         print(f"\n🎨 Generating image: '{prompt[:50]}...'", flush=True)
-        
-        # Generate image using your img_gen.py
         try:
             generator = img_gen.FreeImageGenerator()
             image_path = generator.generate_image(prompt)
         except Exception as img_error:
             print(f"⚠️ Image generation error: {img_error}", flush=True)
+            traceback.print_exc()
             image_path = None
-        
         if not image_path or not os.path.exists(image_path):
             return jsonify({"success": False, "error": "Image generation failed"})
-        
-        # Read image file and convert to base64
         with open(image_path, 'rb') as f:
             image_data = f.read()
-        
         image_base64 = base64.b64encode(image_data).decode('utf-8')
         data_url = f"data:image/png;base64,{image_base64}"
-        
-        # Generate unique ID
         image_id = f"img_{int(time.time())}_{user_id}"
-        
-        # Get just the filename for URL
         filename = os.path.basename(image_path)
-        
-        # Store image info
         with session_lock:
             if user_id not in image_storage:
                 image_storage[user_id] = []
-            
             image_info = {
                 "id": image_id,
                 "prompt": prompt,
@@ -209,10 +167,7 @@ def generate_image_api():
                 "dataUrl": data_url
             }
             image_storage[user_id].append(image_info)
-            
-            # Keep only last 50 images per user
             if len(image_storage[user_id]) > 50:
-                # Delete old files
                 for old_img in image_storage[user_id][:-50]:
                     if os.path.exists(old_img['path']):
                         try:
@@ -220,13 +175,9 @@ def generate_image_api():
                         except:
                             pass
                 image_storage[user_id] = image_storage[user_id][-50:]
-        
-        # Create URL for the image
         image_url = f"http://localhost:5001/api/images/{filename}"
-        
         print(f"✅ Image saved: {image_path}", flush=True)
         print(f"✅ Image URL: {image_url}", flush=True)
-        
         return jsonify({
             "success": True,
             "imageId": image_id,
@@ -234,9 +185,9 @@ def generate_image_api():
             "dataUrl": data_url,
             "prompt": prompt,
             "timestamp": datetime.now().isoformat(),
-            "filename": filename
+            "filename": filename,
+            "localPath": image_path
         })
-        
     except Exception as e:
         print(f"❌ Image generation error: {e}", flush=True)
         traceback.print_exc()
@@ -245,34 +196,48 @@ def generate_image_api():
 # ============ SERVE IMAGES ============
 @app.route('/api/images/<filename>', methods=['GET'])
 def serve_image(filename):
-    """Serve generated images"""
     try:
-        # Security: prevent directory traversal
         if '..' in filename or '/' in filename or '\\' in filename:
             return jsonify({"success": False, "error": "Invalid filename"}), 400
-        
         file_path = os.path.join(GENERATED_IMAGES_DIR, filename)
-        
         if not os.path.exists(file_path):
             print(f"❌ Image not found: {file_path}", flush=True)
             return jsonify({"success": False, "error": "Image not found"}), 404
-        
         return send_file(file_path, mimetype='image/png')
-        
     except Exception as e:
         print(f"❌ Serve image error: {e}", flush=True)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# ============ LIST ALL IMAGES (for VS Code Explorer) ============
+@app.route('/api/images/list', methods=['GET'])
+def list_images():
+    try:
+        files = []
+        for f in os.listdir(GENERATED_IMAGES_DIR):
+            if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+                file_path = os.path.join(GENERATED_IMAGES_DIR, f)
+                stat = os.stat(file_path)
+                files.append({
+                    "filename": f,
+                    "url": f"http://localhost:5001/api/images/{f}",
+                    "size": stat.st_size,
+                    "created": datetime.fromtimestamp(stat.st_ctime).isoformat()
+                })
+        files.sort(key=lambda x: x['created'], reverse=True)
+        return jsonify({"success": True, "images": files})
+    except Exception as e:
+        print(f"❌ Error listing images: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 # ============ GET USER IMAGES ============
 @app.route('/api/get-user-images/<user_id>', methods=['GET'])
 def get_user_images(user_id):
-    """Get all images generated by a user"""
     try:
         with session_lock:
             if user_id in image_storage:
                 images = image_storage[user_id]
                 image_list = []
-                for img in reversed(images):  # Show newest first
+                for img in reversed(images):
                     image_list.append({
                         "id": img['id'],
                         "prompt": img['prompt'],
@@ -281,11 +246,7 @@ def get_user_images(user_id):
                         "dataUrl": img.get('dataUrl'),
                         "filename": img['filename']
                     })
-                return jsonify({
-                    "success": True,
-                    "images": image_list,
-                    "count": len(images)
-                })
+                return jsonify({"success": True, "images": image_list, "count": len(images)})
             else:
                 return jsonify({"success": True, "images": [], "count": 0})
     except Exception as e:
@@ -295,26 +256,21 @@ def get_user_images(user_id):
 # ============ DELETE IMAGE ============
 @app.route('/api/delete-image/<image_id>', methods=['DELETE'])
 def delete_image(image_id):
-    """Delete an image"""
     try:
         data = request.json
         user_id = data.get('userId', 'anonymous')
-        
         with session_lock:
             if user_id in image_storage:
                 for i, img in enumerate(image_storage[user_id]):
                     if img['id'] == image_id:
-                        # Delete file if exists
                         if os.path.exists(img['path']):
                             try:
                                 os.remove(img['path'])
                                 print(f"✅ Deleted file: {img['path']}", flush=True)
                             except Exception as e:
                                 print(f"⚠️ Could not delete file: {e}", flush=True)
-                        # Remove from storage
                         del image_storage[user_id][i]
                         return jsonify({"success": True, "message": "Image deleted"})
-        
         return jsonify({"success": False, "error": "Image not found"}), 404
     except Exception as e:
         print(f"❌ Delete image error: {e}", flush=True)
@@ -354,7 +310,6 @@ def health_check():
         "timestamp": datetime.now().isoformat()
     })
 
-# ============ ROOT ENDPOINT ============
 @app.route('/', methods=['GET'])
 def home():
     return jsonify({
@@ -370,6 +325,7 @@ def home():
             "/api/chat/text - Chat endpoint",
             "/api/generate-image - Generate image",
             "/api/images/<filename> - Get image file",
+            "/api/images/list - List all images",
             "/api/get-user-images/<user_id> - Get user images",
             "/api/delete-image/<image_id> - Delete image",
             "/health - Health check"
